@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package acs12;
+
+import "google/protobuf/empty.proto";
+
+service UserContract {
+    // Define methods as needed
+}

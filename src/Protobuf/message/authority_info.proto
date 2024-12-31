@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package authority;
+
+import "aelf/core.proto";
+
+message AuthorityInfo {
+    aelf.Address contract_address = 1;
+    aelf.Address owner_address = 2;
+}
