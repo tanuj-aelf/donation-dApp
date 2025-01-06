@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package authority;
-
 import "aelf/core.proto";
+
+option csharp_namespace = "AElf.Contracts.DonationApp";
 
 message AuthorityInfo {
     aelf.Address contract_address = 1;
