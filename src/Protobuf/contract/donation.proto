@@ -13,9 +13,10 @@ service DonationDApp {
     option (aelf.base) = "Protobuf/reference/acs12.proto";
     
     rpc IsContractInitialized (google.protobuf.Empty) returns (google.protobuf.BoolValue) {
+        option (aelf.is_view) = true;
     }
     
-    rpc Initialize (google.protobuf.Empty) returns (google.protobuf.Empty) {
+    rpc Initialize (google.protobuf.Empty) returns (google.protobuf.StringValue) {
     }
     
     rpc CreateCampaign (CampaignInput) returns (google.protobuf.StringValue) {
@@ -110,6 +111,12 @@ message UserDetails {
     repeated Campaign campaigns = 2;
     repeated Campaign donatedCampaigns = 3;
     int64 totalRaisedAmount = 4;
+}
+
+message UserInfo {
+    repeated string campaigns = 1;
+    repeated string donated_campaigns = 2;
+    int64 total_raised_amount = 3;
 }
 
 // Events

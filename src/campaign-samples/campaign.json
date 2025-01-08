@@ -1,0 +1,8 @@
+{
+    "title": "Test Campaign",
+    "description": "Test Description",
+    "imageUrl": "https://test.com/image.jpg",
+    "type": "education",
+    "goalAmount": 1000000000,
+    "duration": 86400
+} 

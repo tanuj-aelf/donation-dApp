@@ -3,28 +3,63 @@ using AElf.Types;
 using Google.Protobuf.WellKnownTypes;
 using System.Linq;
 using System.Collections.Generic;
+using AElf.Contracts.MultiToken;
 
 namespace AElf.Contracts.DonationApp
 {
     public class DonationApp : DonationDAppContainer.DonationDAppBase
     {
-        public override BoolValue IsContractInitialized(Empty input)
+        // Token contract constants
+        private const string TokenSymbol = "ELF";
+        private const long MinimumAmount = 1_00000000;    // 1 ELF
+        private const long MaximumAmount = 1000_00000000; // 1000 ELF
+
+        public override BoolValue IsContractInitialized(Empty input) 
         {
             return new BoolValue { Value = State.Initialized.Value };
         }
 
-        public override Empty Initialize(Empty input)
+        public override StringValue Initialize(Empty input)
         {
-            Assert(State.Initialized.Value == false, "Already initialized.");
+            if (State.Initialized.Value)
+            {
+                return new StringValue { Value = "failed" };
+            }
+
+            State.TokenContract.Value = Context.GetContractAddressByName(SmartContractConstants.TokenContractSystemName);
+            Assert(State.TokenContract.Value != null, "Failed to get token contract address");
+            
             State.Initialized.Value = true;
             State.Owner.Value = Context.Sender;
-            return new Empty();
+            State.CampaignCount.Value = 0;
+
+            return new StringValue { Value = "success" };
         }
 
         public override StringValue CreateCampaign(CampaignInput input)
         {
             Assert(State.Initialized.Value, "Contract not initialized.");
-            var campaignId = HashHelper.ComputeFrom(input.Title).ToHex();
+            Assert(input.GoalAmount >= MinimumAmount && input.GoalAmount <= MaximumAmount, 
+                "Goal amount should be between 1 ELF and 1000 ELF");
+
+            // Check if creator has enough tokens
+            var balance = State.TokenContract.GetBalance.Call(new GetBalanceInput
+            {
+                Owner = Context.Sender,
+                Symbol = TokenSymbol
+            }).Balance;
+            Assert(balance >= MinimumAmount, "Insufficient balance for campaign creation.");
+
+            // Check token allowance
+            // var allowance = State.TokenContract.GetAllowance.Call(new GetAllowanceInput
+            // {
+            //     Owner = Context.Sender,
+            //     Spender = Context.Self,
+            //     Symbol = TokenSymbol
+            // }).Allowance;
+            // Assert(allowance >= MinimumAmount, "Please approve token transfer first.");
+
+            var campaignId = HashHelper.ComputeFrom(input.Title + Context.Sender.ToBase58() + Context.CurrentBlockTime.Seconds).ToHex();
             var currentTime = Context.CurrentBlockTime.Seconds;
             var campaign = new Campaign
             {
@@ -39,13 +74,37 @@ namespace AElf.Contracts.DonationApp
                 EndTime = currentTime + input.Duration,
                 IsActive = true
             };
-            
+
+            // Transfer initial donation
+            // State.TokenContract.TransferFrom.Send(new TransferFromInput
+            // {
+            //     From = Context.Sender,
+            //     To = Context.Self,
+            //     Symbol = TokenSymbol,
+            //     Amount = MinimumAmount,
+            //     Memo = $"Initial donation for campaign: {input.Title}"
+            // });
+
             State.Campaigns[campaignId] = campaign;
+            campaign.CurrentAmount += MinimumAmount;
 
             // Update user's campaign list
-            var userInfo = State.UserInfos[Context.Sender] ?? new UserInfo();
-            userInfo.Campaigns.Add(campaignId);
+            var userInfo = State.UserInfos[Context.Sender] ?? new UserInfo 
+            { 
+                Campaigns = { campaignId },
+                DonatedCampaigns = { },
+                TotalRaisedAmount = 0
+            };
+            if (!userInfo.Campaigns.Contains(campaignId))
+            {
+                userInfo.Campaigns.Add(campaignId);
+            }
             State.UserInfos[Context.Sender] = userInfo;
+
+            // Add to campaign index
+            var currentIndex = State.CampaignCount.Value;
+            State.CampaignIdsByIndex[currentIndex] = campaignId;
+            State.CampaignCount.Value = currentIndex + 1;
 
             // Fire campaign created event
             Context.Fire(new CampaignCreatedEvent
@@ -56,7 +115,7 @@ namespace AElf.Contracts.DonationApp
                 GoalAmount = input.GoalAmount
             });
 
-            return new StringValue { Value = campaignId };
+            return new StringValue { Value = campaignId }; 
         }
 
         public override Empty Donate(DonationInput input)
@@ -66,6 +125,23 @@ namespace AElf.Contracts.DonationApp
             Assert(campaign != null, "Campaign does not exist.");
             Assert(campaign.IsActive, "Campaign is not active.");
             Assert(Context.CurrentBlockTime.Seconds < campaign.EndTime, "Campaign has ended.");
+
+            // Check if donor has enough tokens
+            var balance = State.TokenContract.GetBalance.Call(new GetBalanceInput
+            {
+                Owner = Context.Sender,
+                Symbol = TokenSymbol
+            }).Balance;
+            Assert(balance >= input.Amount, "Insufficient balance for donation.");
+
+            // Transfer donation amount
+            State.TokenContract.TransferFrom.Send(new TransferFromInput
+            {
+                From = Context.Sender,
+                To = Context.Self,
+                Symbol = TokenSymbol,
+                Amount = input.Amount
+            });
 
             // Record donation
             var donation = new Donation
@@ -81,10 +157,16 @@ namespace AElf.Contracts.DonationApp
             State.Campaigns[input.CampaignId] = campaign;
 
             // Update user's donation history
-            var userInfo = State.UserInfos[Context.Sender] ?? new UserInfo();
+            var userInfo = State.UserInfos[Context.Sender] ?? new UserInfo
+            {
+                Campaigns = { },
+                DonatedCampaigns = { input.CampaignId },
+                TotalRaisedAmount = input.Amount
+            };
             if (!userInfo.DonatedCampaigns.Contains(input.CampaignId))
             {
                 userInfo.DonatedCampaigns.Add(input.CampaignId);
+                userInfo.TotalRaisedAmount += input.Amount;
             }
             State.UserInfos[Context.Sender] = userInfo;
 
@@ -102,38 +184,15 @@ namespace AElf.Contracts.DonationApp
         public override CampaignList GetCampaignsData(Empty input)
         {
             var campaigns = new List<Campaign>();
-            var processedCampaignIds = new HashSet<string>();
-
-            // Get campaigns from owner's list first
-            var ownerInfo = State.UserInfos[State.Owner.Value];
-            if (ownerInfo != null)
+            var totalCampaigns = State.CampaignCount.Value;
+            
+            for (var i = 0L; i < totalCampaigns; i++)
             {
-                foreach (var campaignId in ownerInfo.Campaigns)
+                var campaignId = State.CampaignIdsByIndex[i];
+                var campaign = State.Campaigns[campaignId];
+                if (campaign != null)
                 {
-                    var campaign = State.Campaigns[campaignId];
-                    if (campaign != null)
-                    {
-                        campaigns.Add(campaign);
-                        processedCampaignIds.Add(campaignId);
-                    }
-                }
-            }
-
-            // Get campaigns from sender's list
-            var senderInfo = State.UserInfos[Context.Sender];
-            if (senderInfo != null)
-            {
-                foreach (var campaignId in senderInfo.Campaigns)
-                {
-                    if (!processedCampaignIds.Contains(campaignId))
-                    {
-                        var campaign = State.Campaigns[campaignId];
-                        if (campaign != null)
-                        {
-                            campaigns.Add(campaign);
-                            processedCampaignIds.Add(campaignId);
-                        }
-                    }
+                    campaigns.Add(campaign);
                 }
             }
 

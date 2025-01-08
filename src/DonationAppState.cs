@@ -4,16 +4,12 @@ using System.Collections.Generic;
 
 namespace AElf.Contracts.DonationApp
 {
-    public class UserInfo
-    {
-        public List<string> Campaigns { get; set; } = new List<string>();
-        public List<string> DonatedCampaigns { get; set; } = new List<string>();
-        public long TotalRaisedAmount { get; set; }
-    }
-
     public partial class DonationAppState : ContractState
     {
+        // A state to check if contract is initialized
         public BoolState Initialized { get; set; }
+        
+        // A state to store the owner address
         public SingletonState<Address> Owner { get; set; }
         
         // Maps campaign ID to Campaign
@@ -24,5 +20,11 @@ namespace AElf.Contracts.DonationApp
         
         // Maps campaign ID to list of rewards sent
         public MappedState<string, List<Donation>> CampaignRewards { get; set; }
+
+        // Store campaign IDs by index
+        public MappedState<long, string> CampaignIdsByIndex { get; set; }
+        
+        // Total number of campaigns
+        public SingletonState<long> CampaignCount { get; set; }
     }
 } 
