@@ -19,7 +19,7 @@ namespace AElf.Contracts.DonationApp
         public MappedState<Address, UserInfo> UserInfos { get; set; }
         
         // Maps campaign ID to list of rewards sent
-        public MappedState<string, List<Donation>> CampaignRewards { get; set; }
+        public MappedState<string, DonationList> CampaignRewards { get; set; }
 
         // Store campaign IDs by index
         public MappedState<long, string> CampaignIdsByIndex { get; set; }

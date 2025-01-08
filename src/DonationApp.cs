@@ -63,6 +63,7 @@ namespace AElf.Contracts.DonationApp
             var currentTime = Context.CurrentBlockTime.Seconds;
             var campaign = new Campaign
             {
+                Id = campaignId,
                 Title = input.Title,
                 Description = input.Description,
                 ImageUrl = input.ImageUrl,
@@ -86,7 +87,7 @@ namespace AElf.Contracts.DonationApp
             // });
 
             State.Campaigns[campaignId] = campaign;
-            campaign.CurrentAmount += MinimumAmount;
+            // campaign.CurrentAmount += MinimumAmount;
 
             // Update user's campaign list
             var userInfo = State.UserInfos[Context.Sender] ?? new UserInfo 
@@ -203,6 +204,7 @@ namespace AElf.Contracts.DonationApp
         {
             var campaign = State.Campaigns[input.Value];
             Assert(campaign != null, "Campaign does not exist.");
+            Assert(campaign.Id == input.Value, "Campaign ID mismatch");
             return campaign;
         }
 
@@ -231,6 +233,7 @@ namespace AElf.Contracts.DonationApp
         {
             var campaign = State.Campaigns[input.CampaignId];
             Assert(campaign != null, "Campaign does not exist.");
+            Assert(campaign.Id == input.CampaignId, "Campaign ID mismatch");
             Assert(campaign.Creator == Context.Sender, "Only the creator can edit the campaign.");
 
             if (!string.IsNullOrEmpty(input.NewTitle))
@@ -283,8 +286,9 @@ namespace AElf.Contracts.DonationApp
                 Timestamp = Context.CurrentBlockTime.Seconds
             };
 
-            var rewards = State.CampaignRewards[input.CampaignId] ?? new List<Donation>();
-            rewards.Add(reward);
+            // Get or create rewards list
+            var rewards = State.CampaignRewards[input.CampaignId] ?? new DonationList();
+            rewards.Value.Add(reward);
             State.CampaignRewards[input.CampaignId] = rewards;
 
             // Fire reward sent event
