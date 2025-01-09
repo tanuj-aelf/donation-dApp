@@ -11,7 +11,6 @@ namespace AElf.Contracts.DonationApp
     {
         // Token contract constants
         private const string TokenSymbol = "ELF";
-        private const long MinimumAmount = 1_00000000;    // 1 ELF
         private const long MaximumAmount = 1000_00000000; // 1000 ELF
 
         public override BoolValue IsContractInitialized(Empty input) 
@@ -39,25 +38,8 @@ namespace AElf.Contracts.DonationApp
         public override StringValue CreateCampaign(CampaignInput input)
         {
             Assert(State.Initialized.Value, "Contract not initialized.");
-            Assert(input.GoalAmount >= MinimumAmount && input.GoalAmount <= MaximumAmount, 
-                "Goal amount should be between 1 ELF and 1000 ELF");
-
-            // Check if creator has enough tokens
-            var balance = State.TokenContract.GetBalance.Call(new GetBalanceInput
-            {
-                Owner = Context.Sender,
-                Symbol = TokenSymbol
-            }).Balance;
-            Assert(balance >= MinimumAmount, "Insufficient balance for campaign creation.");
-
-            // Check token allowance
-            // var allowance = State.TokenContract.GetAllowance.Call(new GetAllowanceInput
-            // {
-            //     Owner = Context.Sender,
-            //     Spender = Context.Self,
-            //     Symbol = TokenSymbol
-            // }).Allowance;
-            // Assert(allowance >= MinimumAmount, "Please approve token transfer first.");
+            Assert(input.GoalAmount <= MaximumAmount, 
+                "Goal amount should be less than equal to 1000 ELF");
 
             var campaignId = HashHelper.ComputeFrom(input.Title + Context.Sender.ToBase58() + Context.CurrentBlockTime.Seconds).ToHex();
             var currentTime = Context.CurrentBlockTime.Seconds;
@@ -76,18 +58,7 @@ namespace AElf.Contracts.DonationApp
                 IsActive = true
             };
 
-            // Transfer initial donation
-            // State.TokenContract.TransferFrom.Send(new TransferFromInput
-            // {
-            //     From = Context.Sender,
-            //     To = Context.Self,
-            //     Symbol = TokenSymbol,
-            //     Amount = MinimumAmount,
-            //     Memo = $"Initial donation for campaign: {input.Title}"
-            // });
-
             State.Campaigns[campaignId] = campaign;
-            // campaign.CurrentAmount += MinimumAmount;
 
             // Update user's campaign list
             var userInfo = State.UserInfos[Context.Sender] ?? new UserInfo 
