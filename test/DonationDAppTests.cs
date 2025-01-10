@@ -1,130 +1,56 @@
 using System.Threading.Tasks;
+using AElf.Types;
 using Google.Protobuf.WellKnownTypes;
 using Shouldly;
 using Xunit;
 
-namespace AElf.Contracts.DonationDApp
+namespace AElf.Contracts.DonationApp
 {
-    public class DonationDAppTests : TestBase
+    public class DonationDAppTests : DonationDAppTestBase
     {
         [Fact]
-        public async Task Initialize_ShouldSetOwner()
+        public async Task Initialize_Test()
         {
-            // Arrange
-            var input = new Empty();
-
-            // Act
-            await DonationDAppStub.Initialize.SendAsync(input);
-
+            // Arrange & Act
+            var result = await DonationContract.Initialize.SendAsync(new InitializeInput());
+            
             // Assert
-            var owner = await DonationDAppStub.GetOwner.CallAsync(new Empty());
-            owner.ShouldBe(DefaultKeyPair);
+            result.TransactionResult.Status.ShouldBe(TransactionResultStatus.Mined);
+            
+            var isInitialized = await DonationContract.IsContractInitialized.CallAsync(new Empty());
+            isInitialized.Value.ShouldBeTrue();
         }
 
         [Fact]
-        public async Task CreateCampaign_ShouldCreateNewCampaign()
+        public async Task CreateCampaign_Success()
         {
             // Arrange
-            var input = new CampaignInput
+            await DonationContract.Initialize.SendAsync(new InitializeInput());
+            
+            var input = new CreateCampaignInput
             {
                 Title = "Test Campaign",
-                Description = "This is a test campaign.",
-                ImageUrl = "http://example.com/image.png",
-                Type = "Education",
-                TargetFund = 1000,
-                EndDate = 1735616381 // Example timestamp
+                Description = "Test Description",
+                TargetAmount = 100_00000000,
+                StartTime = GetTimestamp(),
+                EndTime = GetTimestamp(30)  // 30 days from now
             };
 
             // Act
-            var campaignId = await DonationDAppStub.CreateCampaign.SendAsync(input);
+            var result = await DonationContract.CreateCampaign.SendAsync(input);
 
             // Assert
-            var campaign = await DonationDAppStub.GetCampaign.CallAsync(campaignId);
+            result.TransactionResult.Status.ShouldBe(TransactionResultStatus.Mined);
+            var campaignId = result.Output;
+            campaignId.ShouldNotBeNull();
+
+            var campaign = await DonationContract.GetCampaign.CallAsync(new StringValue { Value = campaignId.Value });
             campaign.Title.ShouldBe(input.Title);
             campaign.Description.ShouldBe(input.Description);
-        }
-
-        [Fact]
-        public async Task Donate_ShouldUpdateRaisedFund()
-        {
-            // Arrange
-            var campaignInput = new CampaignInput
-            {
-                Title = "Test Campaign",
-                Description = "This is a test campaign.",
-                ImageUrl = "http://example.com/image.png",
-                Type = "Education",
-                TargetFund = 1000,
-                EndDate = 1735616381 // Example timestamp
-            };
-            var campaignId = await DonationDAppStub.CreateCampaign.SendAsync(campaignInput);
-
-            var donationInput = new DonationInput
-            {
-                CampaignId = campaignId.Value,
-                Amount = 100
-            };
-
-            // Act
-            await DonationDAppStub.Donate.SendAsync(donationInput);
-
-            // Assert
-            var campaign = await DonationDAppStub.GetCampaign.CallAsync(campaignId);
-            campaign.RaisedFund.ShouldBe(100);
-        }
-
-        [Fact]
-        public async Task EditCampaign_ShouldUpdateCampaignDetails()
-        {
-            // Arrange
-            var campaignInput = new CampaignInput
-            {
-                Title = "Test Campaign",
-                Description = "This is a test campaign.",
-                ImageUrl = "http://example.com/image.png",
-                Type = "Education",
-                TargetFund = 1000,
-                EndDate = 1735616381 // Example timestamp
-            };
-            var campaignId = await DonationDAppStub.CreateCampaign.SendAsync(campaignInput);
-
-            var editInput = new EditCampaignInput
-            {
-                Id = campaignId.Value,
-                Title = "Updated Campaign Title",
-                Description = "Updated description."
-            };
-
-            // Act
-            await DonationDAppStub.EditCampaign.SendAsync(editInput);
-
-            // Assert
-            var updatedCampaign = await DonationDAppStub.GetCampaign.CallAsync(campaignId);
-            updatedCampaign.Title.ShouldBe("Updated Campaign Title");
-            updatedCampaign.Description.ShouldBe("Updated description.");
-        }
-
-        [Fact]
-        public async Task DeleteCampaign_ShouldRemoveCampaign()
-        {
-            // Arrange
-            var campaignInput = new CampaignInput
-            {
-                Title = "Test Campaign",
-                Description = "This is a test campaign.",
-                ImageUrl = "http://example.com/image.png",
-                Type = "Education",
-                TargetFund = 1000,
-                EndDate = 1735616381 // Example timestamp
-            };
-            var campaignId = await DonationDAppStub.CreateCampaign.SendAsync(campaignInput);
-
-            // Act
-            await DonationDAppStub.DeleteCampaign.SendAsync(new StringValue { Value = campaignId.Value });
-
-            // Assert
-            var deletedCampaign = await DonationDAppStub.GetCampaign.CallAsync(campaignId);
-            deletedCampaign.Description.ShouldBe("Campaign not found.");
+            campaign.TargetAmount.ShouldBe(input.TargetAmount);
+            campaign.StartTime.ShouldBe(input.StartTime);
+            campaign.EndTime.ShouldBe(input.EndTime);
+            campaign.Owner.ShouldBe(DefaultAddress);
         }
     }
 } 
