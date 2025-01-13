@@ -43,7 +43,7 @@ service DonationDApp {
     rpc DeleteCampaign (google.protobuf.StringValue) returns (google.protobuf.Empty) {
     }
     
-    rpc SendReward (RewardInput) returns (google.protobuf.Empty) {
+    rpc WithdrawCampaignAmount (WithdrawCampaignInput) returns (google.protobuf.Empty) {
     }
     
     rpc GetUserDetails (aelf.Address) returns (UserDetails) {
@@ -60,6 +60,10 @@ message CampaignInput {
     int64 duration = 6;
 }
 
+message WithdrawCampaignInput {
+    string campaignId = 1;
+}
+
 message DonationInput {
     string campaignId = 1;
     int64 amount = 2;
@@ -73,13 +77,6 @@ message EditCampaignInput {
     string newType = 5;
     int64 newGoalAmount = 6;
     bool newIsActive = 7;
-}
-
-message RewardInput {
-    string campaignId = 1;
-    aelf.Address recipient = 2;
-    int64 amount = 3;
-    string message = 4;
 }
 
 message Donation {
@@ -101,6 +98,7 @@ message Campaign {
     int64 endTime = 10;
     repeated Donation donators = 11;
     bool isActive = 12;
+    bool isWithdrawn = 13;
 }
 
 message CampaignList {
@@ -140,10 +138,9 @@ message DonationMadeEvent {
     int64 amount = 3;
 }
 
-message RewardSentEvent {
+message CampaignWithdrawnEvent {
     option (aelf.is_event) = true;
     string campaignId = 1;
-    aelf.Address recipient = 2;
-    int64 amount = 3;
-    string message = 4;
+    int64 amount = 2;
+    aelf.Address recipient = 3;
 } 

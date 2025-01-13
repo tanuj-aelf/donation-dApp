@@ -55,7 +55,8 @@ namespace AElf.Contracts.DonationApp
                 Creator = Context.Sender,
                 StartTime = currentTime,
                 EndTime = currentTime + input.Duration,
-                IsActive = true
+                IsActive = true,
+                IsWithdrawn = false
             };
 
             State.Campaigns[campaignId] = campaign;
@@ -244,31 +245,32 @@ namespace AElf.Contracts.DonationApp
             return new Empty();
         }
 
-        public override Empty SendReward(RewardInput input)
+        public override Empty WithdrawCampaignAmount(WithdrawCampaignInput input)
         {
             var campaign = State.Campaigns[input.CampaignId];
             Assert(campaign != null, "Campaign does not exist.");
-            Assert(campaign.Creator == Context.Sender, "Only the creator can send rewards.");
-            
-            var reward = new Donation
+            Assert(campaign.Creator == Context.Sender, "Only the campaign creator can withdraw funds.");
+            Assert(Context.CurrentBlockTime.Seconds >= campaign.EndTime, "Campaign duration has not ended yet.");
+            Assert(!campaign.IsWithdrawn, "Campaign funds have already been withdrawn.");
+
+            // Transfer campaign amount to creator
+            State.TokenContract.Transfer.Send(new TransferInput
             {
-                Donor = Context.Sender,
-                Amount = input.Amount,
-                Timestamp = Context.CurrentBlockTime.Seconds
-            };
+                To = campaign.Creator,
+                Symbol = TokenSymbol,
+                Amount = campaign.CurrentAmount
+            });
 
-            // Get or create rewards list
-            var rewards = State.CampaignRewards[input.CampaignId] ?? new DonationList();
-            rewards.Value.Add(reward);
-            State.CampaignRewards[input.CampaignId] = rewards;
+            // Update withdrawal status
+            campaign.IsWithdrawn = true;
+            State.Campaigns[input.CampaignId] = campaign;
 
-            // Fire reward sent event
-            Context.Fire(new RewardSentEvent
+            // Fire withdrawal event
+            Context.Fire(new CampaignWithdrawnEvent
             {
                 CampaignId = input.CampaignId,
-                Recipient = input.Recipient,
-                Amount = input.Amount,
-                Message = input.Message
+                Amount = campaign.CurrentAmount,
+                Recipient = campaign.Creator
             });
 
             return new Empty();
