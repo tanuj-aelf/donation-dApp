@@ -96,8 +96,7 @@ namespace AElf.Contracts.DonationApp
             Assert(State.Initialized.Value, "Contract not initialized.");
             var campaign = State.Campaigns[input.CampaignId];
             Assert(campaign != null, "Campaign does not exist.");
-            Assert(campaign.IsActive, "Campaign is not active.");
-            Assert(Context.CurrentBlockTime.Seconds < campaign.EndTime, "Campaign has ended.");
+            Assert(IsCampaignActive(campaign), "Campaign is not active or has ended.");
 
             // Check if donor has enough tokens
             var balance = State.TokenContract.GetBalance.Call(new GetBalanceInput
@@ -165,6 +164,7 @@ namespace AElf.Contracts.DonationApp
                 var campaign = State.Campaigns[campaignId];
                 if (campaign != null)
                 {
+                    campaign.IsActive = IsCampaignActive(campaign);
                     campaigns.Add(campaign);
                 }
             }
@@ -172,11 +172,16 @@ namespace AElf.Contracts.DonationApp
             return new CampaignList { Value = { campaigns } };
         }
 
-        public override Campaign GetCampaign(StringValue input)
+        private bool IsCampaignActive(Campaign campaign)
         {
-            var campaign = State.Campaigns[input.Value];
-            Assert(campaign != null, "Campaign does not exist.");
-            Assert(campaign.Id == input.Value, "Campaign ID mismatch");
+            return campaign.IsActive && 
+                   Context.CurrentBlockTime.Seconds <= campaign.EndTime;
+        }
+
+        public override Campaign GetCampaign(StringValue campaignId)
+        {
+            var campaign = State.Campaigns[campaignId.Value];
+            campaign.IsActive = IsCampaignActive(campaign);
             return campaign;
         }
 
@@ -194,6 +199,7 @@ namespace AElf.Contracts.DonationApp
                 var campaign = State.Campaigns[id];
                 if (campaign != null)
                 {
+                    campaign.IsActive = IsCampaignActive(campaign);
                     campaigns.Add(campaign);
                 }
             }
@@ -286,6 +292,7 @@ namespace AElf.Contracts.DonationApp
                 var campaign = State.Campaigns[id];
                 if (campaign != null)
                 {
+                    campaign.IsActive = IsCampaignActive(campaign);
                     campaigns.Add(campaign);
                 }
             }
@@ -296,6 +303,7 @@ namespace AElf.Contracts.DonationApp
                 var campaign = State.Campaigns[id];
                 if (campaign != null)
                 {
+                    campaign.IsActive = IsCampaignActive(campaign);
                     donatedCampaigns.Add(campaign);
                 }
             }
